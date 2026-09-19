@@ -88,3 +88,96 @@ A：运行 `unblock-adobe-network.ps1`。
 ## 许可证
 
 MIT
+
+---
+
+# English Version
+
+> One-click block / restore of network access for the entire Adobe suite on Windows (Photoshop, Illustrator, Lightroom, Premiere, After Effects, Acrobat, Creative Cloud, etc.)
+
+## What it solves
+
+After Adobe validates your license online, it may show **"You no longer have access to this app"** and lock the app. This skill uses the **Windows Firewall to block each executable by path**, so the Adobe suite cannot reach the internet and license validation, genuine-software checks, and auto-updates never run.
+
+Highlights:
+
+- **Auto-discovers** every Adobe install on the machine (no hardcoded app list)
+- Creates **outbound + inbound** block rules for every executable
+- Handles the #1 gotcha: **third-party security software silently disables Windows Firewall**, which makes all rules useless
+- Backs up the local Adobe license cache, fixing the "popup still appears even offline" problem
+- Idempotent: safe to re-run, no duplicate rules
+- One-command undo
+
+## Requirements
+
+- Windows 10 / 11 (Server 2012+)
+- PowerShell 5.1+
+- **Administrator privileges** (UAC elevation)
+
+## Installation
+
+### As an agent skill
+
+1. Click `Code → Download ZIP` on the repository page and unzip
+2. Drop the `block-adobe-network` folder into your environment's `.user_skills` directory
+3. Restart the session and say "disable Adobe network access" to trigger it
+
+### Run scripts manually
+
+```powershell
+# Block everything (run PowerShell as administrator)
+.\block-adobe-network.ps1
+
+# Verify current blocking state (no admin needed)
+.\verify-adobe-network.ps1
+
+# Restore network access
+.\unblock-adobe-network.ps1
+```
+
+## Scripts
+
+| Script | Purpose | Admin needed |
+|---|---|---|
+| `block-adobe-network.ps1` | Discover Adobe installs → create out+in block rules for every .exe → enable firewall if needed → back up license cache → stop background helpers | Yes |
+| `verify-adobe-network.ps1` | Read-only report: firewall state, rule counts, uncovered executables, cache backups, running Adobe processes | No |
+| `unblock-adobe-network.ps1` | Remove all BlockAdobe_* rules and restore license caches | Yes |
+
+Optional flags for `block-adobe-network.ps1`:
+
+- `-SkipLicenseCacheBackup`
+- `-SkipFirewallEnable`
+- `-SkipKillHelpers` (never kills the main apps: Photoshop/Illustrator/Lightroom)
+
+## How it works
+
+1. **Discover** reads the uninstall registry (any product whose name contains "Adobe") and scans `C:\Program Files\Adobe`, `Common Files\Adobe`, AppData, and other common paths.
+2. **Rule creation** enumerates every `.exe` recursively and creates `BlockAdobe_OUT_*` / `BlockAdobe_IN_*` firewall rules.
+3. **Firewall on**: enables any of the three profiles (Domain / Private / Public) that are disabled.
+4. **Cache cleanup**: renames `Adobe PCD\cache.db`, `pcd.db`, `SLStore\*` to `.bak`; on next launch the app re-validates, fails to reach the server, and runs offline.
+5. **Verify**: confirms the firewall is on, rules are active, and nothing is missed.
+
+## FAQ
+
+**Q: Rules exist but Photoshop still shows the "no access" popup?**
+A: 99% of the time Windows Firewall is disabled by security software. Run `verify-adobe-network.ps1` and check that all three profiles show `Enabled=True`.
+
+**Q: The popup still appears even offline?**
+A: Adobe cached the "non-genuine" verdict locally. The script renames the cache databases to `.bak`; restart the app so it re-validates.
+
+**Q: I install AE / Premiere later — what now?**
+A: Just re-run `block-adobe-network.ps1`; it adds rules for the new apps automatically (existing rules are skipped).
+
+**Q: I want normal network access back.**
+A: Run `unblock-adobe-network.ps1`.
+
+## Notes
+
+- Cloud sync, Stock assets, online fonts, and AI generation features of Adobe will be unavailable — this is expected.
+- Only Adobe processes are blocked; your browser can still reach adobe.com.
+- Re-run the script after moving Adobe installs or reinstalling Windows.
+- For personal / research use only. Follow the software license terms applicable in your jurisdiction.
+
+## License
+
+MIT
