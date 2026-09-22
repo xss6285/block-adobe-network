@@ -62,12 +62,16 @@ Adobe 软件联网校验授权后，会弹出 **"You no longer have access to th
 2. **建规则**：递归枚举所有 `.exe`，逐个创建 `BlockAdobe_OUT_*` / `BlockAdobe_IN_*` 防火墙规则
 3. **开防火墙**：若三个配置文件（域/专用/公用）任一被关闭则自动启用
 4. **清缓存**：把 `Adobe PCD\cache.db`、`pcd.db`、`SLStore\*` 重命名为 `.bak`，应用重新校验时连不上服务器即进入离线可用状态
-5. **验证**：确认防火墙 Enabled、规则生效、无遗漏程序
+5. **绕代理**：把 Adobe 域名加入系统代理绕过列表，防止应用借代理绕过防火墙规则
+6. **验证**：确认防火墙 Enabled、规则生效、无遗漏程序
 
 ## 常见问题
 
 **Q：规则建了，但 PS 还是弹"失去访问权限"？**
 A：99% 是 Windows 防火墙被安全软件关了。先跑 `verify-adobe-network.ps1`，看防火墙三个配置文件是否 `Enabled=True`。
+
+**Q：防火墙正常、规则也在，弹窗还是出现？**
+A：检查是否走了**系统代理**（Clash/mihomo 等）。开了系统代理时，Adobe 应用经 `127.0.0.1:代理端口` 出网，真实连接由代理进程发出，按程序路径的防火墙规则拦不到。主脚本会自动把 Adobe 域名加入代理绕过列表，让应用直连后由防火墙拦截；改完需完全重启 Adobe 应用。
 
 **Q：断网后弹窗依然在？**
 A：之前联网时 Adobe 返回的"非正版"结论被缓存到了本地数据库。`block-adobe-network.ps1` 会自动把缓存数据库改名备份，应用重启后重新校验即可。
@@ -104,6 +108,7 @@ Highlights:
 - **Auto-discovers** every Adobe install on the machine (no hardcoded app list)
 - Creates **outbound + inbound** block rules for every executable
 - Handles the #1 gotcha: **third-party security software silently disables Windows Firewall**, which makes all rules useless
+- **Defeats system proxies**: adds Adobe domains to the proxy bypass list so apps cannot tunnel around the firewall rules via Clash/mihomo
 - Backs up the local Adobe license cache, fixing the "popup still appears even offline" problem
 - Idempotent: safe to re-run, no duplicate rules
 - One-command undo
@@ -155,12 +160,16 @@ Optional flags for `block-adobe-network.ps1`:
 2. **Rule creation** enumerates every `.exe` recursively and creates `BlockAdobe_OUT_*` / `BlockAdobe_IN_*` firewall rules.
 3. **Firewall on**: enables any of the three profiles (Domain / Private / Public) that are disabled.
 4. **Cache cleanup**: renames `Adobe PCD\cache.db`, `pcd.db`, `SLStore\*` to `.bak`; on next launch the app re-validates, fails to reach the server, and runs offline.
-5. **Verify**: confirms the firewall is on, rules are active, and nothing is missed.
+5. **Proxy bypass**: adds Adobe domains to the system proxy bypass list so apps connect directly and get caught by the firewall rules.
+6. **Verify**: confirms the firewall is on, rules are active, and nothing is missed.
 
 ## FAQ
 
 **Q: Rules exist but Photoshop still shows the "no access" popup?**
 A: 99% of the time Windows Firewall is disabled by security software. Run `verify-adobe-network.ps1` and check that all three profiles show `Enabled=True`.
+
+**Q: Firewall is on, rules are in place, but the popup still appears?**
+A: Check for a **system proxy** (Clash/mihomo etc.). With a system proxy enabled, Adobe apps connect via `127.0.0.1:<proxy-port>` and the real outbound connection is made by the proxy process, which per-program firewall rules cannot catch. The main script automatically adds Adobe domains to the proxy bypass list so apps connect directly and are blocked by the firewall; fully restart the Adobe app afterwards.
 
 **Q: The popup still appears even offline?**
 A: Adobe cached the "non-genuine" verdict locally. The script renames the cache databases to `.bak`; restart the app so it re-validates.

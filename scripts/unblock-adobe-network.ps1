@@ -47,4 +47,24 @@ foreach ($pat in $bakPatterns) {
     }
 }
 
+Write-Output '== Restoring proxy bypass list =='
+$inet = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+try {
+    $cur = (Get-ItemProperty -Path $inet -Name ProxyOverride -ErrorAction SilentlyContinue).ProxyOverride
+    $adobeParts = 'adobe.com;*.adobe.com;adobe.io;*.adobe.io;adobe.net;*.adobe.net;adobecreativecloud.com;*.adobecreativecloud.com;adobessm.com;*.adobessm.com;adobessm.net;*.adobessm.net' -split ';'
+    if ($cur) {
+        $new = @($cur -split ';' | Where-Object { $adobeParts -notcontains $_ }) -join ';'
+        if ($new -ne $cur) {
+            Set-ItemProperty -Path $inet -Name ProxyOverride -Value $new
+            $log.Add('Removed Adobe domains from proxy bypass list.')
+        } else {
+            $log.Add('No Adobe domains found in proxy bypass list.')
+        }
+    } else {
+        $log.Add('No proxy bypass list present.')
+    }
+} catch {
+    $log.Add("FAIL proxy bypass restore :: $($_.Exception.Message)")
+}
+
 $log | ForEach-Object { Write-Output $_ }

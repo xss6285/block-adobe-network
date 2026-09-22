@@ -136,6 +136,30 @@ if (-not $SkipLicenseCacheBackup) {
     Write-Log 'Skipped license cache backup (SkipLicenseCacheBackup).'
 }
 
+# ---- 5.5 Ensure Adobe apps bypass the system proxy so firewall rules apply ----
+# Apps that honor the system proxy (e.g. Clash/mihomo) can tunnel around
+# per-program firewall rules: the real outbound connection is made by the
+# proxy process, not the Adobe exe. Forcing Adobe domains to connect directly
+# makes the per-program Block rules catch them.
+try {
+    $inet = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+    $cur = (Get-ItemProperty -Path $inet -Name ProxyOverride -ErrorAction SilentlyContinue).ProxyOverride
+    $adobeBypass = 'adobe.com;*.adobe.com;adobe.io;*.adobe.io;adobe.net;*.adobe.net;adobecreativecloud.com;*.adobecreativecloud.com;adobessm.com;*.adobessm.com;adobessm.net;*.adobessm.net'
+    $adobeParts = $adobeBypass -split ';'
+    $missing = @($adobeParts | Where-Object { $cur -and $cur.IndexOf($_, [System.StringComparison]::OrdinalIgnoreCase) -lt 0 })
+    if (-not $cur) {
+        Set-ItemProperty -Path $inet -Name ProxyOverride -Value $adobeBypass
+        Write-Log 'Set Adobe domains as proxy bypass (no previous override list).'
+    } elseif ($missing.Count -gt 0) {
+        Set-ItemProperty -Path $inet -Name ProxyOverride -Value "$cur;$($missing -join ';')"
+        Write-Log "Added Adobe domains to proxy bypass: $($missing -join ';')"
+    } else {
+        Write-Log 'Adobe domains already in proxy bypass list.'
+    }
+} catch {
+    Write-Log "  WARN could not update proxy bypass :: $($_.Exception.Message)"
+}
+
 # ---- 6. Stop background helper processes (never main apps) ----
 if (-not $SkipKillHelpers) {
     $helperNames = @('CCXProcess', 'CCLibrary', 'AdobeIPCBroker', 'CoreSync', 'LogCollectorTool')
