@@ -75,7 +75,7 @@ A：99% 是 Windows 防火墙被安全软件关了。先跑 `verify-adobe-networ
 
 **Q：防火墙正常、规则也在，弹窗还是出现？**
 A：检查是否走了**系统代理**（Clash/mihomo 等）。开了系统代理时，Adobe 应用经 `127.0.0.1:代理端口` 出网，真实连接由代理进程发出，按程序路径的防火墙规则拦不到。主脚本会自动把 Adobe 域名加入代理绕过列表，让应用直连后由防火墙拦截；改完需完全重启 Adobe 应用。
-**注意**：Clash Verge 启动/重配时会重写系统代理并冲掉手动添加的绕过项（绕过列表又变回默认）。重跑主脚本即可，它会同时把 Adobe 域名写进 Clash 自己的 `verge.yaml`，之后重启 Clash 也不会丢。
+**注意**：Clash Verge 启动/重配时会重写系统代理并冲掉手动添加的绕过项（绕过列表又变回默认）。**修改它的配置必须在 Clash 停止时进行**——重跑主脚本前先完全退出 Clash Verge（托盘退出），脚本会把 Adobe 域名写进 Clash 自己的 `verge.yaml`；之后重启 Clash Verge，它每次都会自动带上 Adobe 绕过，不会再丢。
 
 **Q：断网后弹窗依然在？**
 A：之前联网时 Adobe 返回的"非正版"结论被缓存到了本地数据库。`block-adobe-network.ps1` 会自动把缓存数据库改名备份，应用重启后重新校验即可。
@@ -177,7 +177,7 @@ A: 99% of the time Windows Firewall is disabled by security software. Run `verif
 
 **Q: Firewall is on, rules are in place, but the popup still appears?**
 A: Check for a **system proxy** (Clash/mihomo etc.). With a system proxy enabled, Adobe apps connect via `127.0.0.1:<proxy-port>` and the real outbound connection is made by the proxy process, which per-program firewall rules cannot catch. The main script automatically adds Adobe domains to the proxy bypass list so apps connect directly and are blocked by the firewall; fully restart the Adobe app afterwards.
-**Note**: Clash Verge rewrites the system proxy (wiping manually-added bypass entries) on start/re-apply. Re-run the main script - it also writes the Adobe domains into Clash Verge's own `verge.yaml`, so they survive proxy restarts.
+**Note**: Clash Verge rewrites the system proxy (wiping manually-added bypass entries) on start/re-apply. **Config changes must be made while Clash is stopped** - fully exit Clash Verge (tray quit) before re-running the main script; it writes the Adobe domains into Clash Verge's own `verge.yaml`, and after restarting Clash Verge the bypass survives every restart.
 
 **Q: The popup still appears even offline?**
 A: Adobe cached the "non-genuine" verdict locally. The script renames the cache databases to `.bak`; restart the app so it re-validates.

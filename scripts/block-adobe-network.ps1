@@ -189,6 +189,8 @@ if (Test-Path -LiteralPath $vergeYaml) {
         if ($changed) {
             Set-Content -LiteralPath $vergeYaml -Value $newLines -Encoding UTF8
             Write-Log 'Patched Clash Verge verge.yaml: Adobe domains added to system proxy bypass (persists across restarts).'
+            Write-Log '  NOTE: If Clash Verge is currently RUNNING, close it (tray exit) and start it again once,'
+            Write-Log '  otherwise it will overwrite this file with its old in-memory config on exit.'
         } else {
             Write-Log 'Clash Verge verge.yaml already contains Adobe bypass.'
         }
