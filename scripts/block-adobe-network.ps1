@@ -160,6 +160,89 @@ try {
     Write-Log "  WARN could not update proxy bypass :: $($_.Exception.Message)"
 }
 
+# ---- 5.6 Persist Adobe bypass inside Clash Verge config (if present) ----
+# Clash Verge rewrites the system proxy (including ProxyOverride) whenever it
+# starts or re-applies settings, which wipes manual bypass additions. Patch its
+# own config so the Adobe domains survive: use_default_bypass: false and a
+# system_proxy_bypass list that includes Adobe domains.
+$vergeYaml = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev\verge.yaml'
+if (Test-Path -LiteralPath $vergeYaml) {
+    try {
+        $bypassDefaults = 'localhost;127.*;192.168.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;<local>'
+        $lines = @(Get-Content -LiteralPath $vergeYaml)
+        $changed = $false
+        $newLines = foreach ($line in $lines) {
+            if ($line -match '^\s*use_default_bypass:\s*true\s*$') {
+                $changed = $true
+                'use_default_bypass: false'
+            } elseif ($line -match '^\s*system_proxy_bypass:\s*(null|"")\s*$') {
+                $changed = $true
+                "system_proxy_bypass: `"$bypassDefaults;$adobeBypass`""
+            } elseif ($line -match '^\s*system_proxy_bypass:\s*"([^"]*)"') {
+                $curVal = $Matches[1]
+                if ($curVal.IndexOf('adobe', [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                    $changed = $true
+                    "system_proxy_bypass: `"$curVal;$adobeBypass`""
+                } else { $line }
+            } else { $line }
+        }
+        if ($changed) {
+            Set-Content -LiteralPath $vergeYaml -Value $newLines -Encoding UTF8
+            Write-Log 'Patched Clash Verge verge.yaml: Adobe domains added to system proxy bypass (persists across restarts).'
+        } else {
+            Write-Log 'Clash Verge verge.yaml already contains Adobe bypass.'
+        }
+    } catch {
+        Write-Log "  WARN could not patch Clash Verge config :: $($_.Exception.Message)"
+    }
+} else {
+    Write-Log 'Clash Verge config not found; skipped.'
+}
+
+# ---- 5.7 Block Adobe licensing domains via hosts file (defense in depth) ----
+$hostsFile = "$env:windir\System32\drivers\etc\hosts"
+$hostEntries = @(
+    '0.0.0.0 adobe.io',
+    '0.0.0.0 adobestats.io',
+    '0.0.0.0 lmlicenses.wip4.adobe.com',
+    '0.0.0.0 lm.licenses.adobe.com',
+    '0.0.0.0 prod.adobegenuine.com',
+    '0.0.0.0 genuine.adobe.com',
+    '0.0.0.0 cc-api.adobe.io',
+    '0.0.0.0 ic.adobe.io',
+    '0.0.0.0 na1r.services.adobe.com',
+    '0.0.0.0 hlrcv.stage.adobe.com',
+    '0.0.0.0 3dns.adobe.com',
+    '0.0.0.0 3dns-1.adobe.com',
+    '0.0.0.0 3dns-2.adobe.com',
+    '0.0.0.0 3dns-3.adobe.com',
+    '0.0.0.0 adobe-dns.adobe.com',
+    '0.0.0.0 adobe-dns-1.adobe.com',
+    '0.0.0.0 adobe-dns-2.adobe.com',
+    '0.0.0.0 adobe-dns-3.adobe.com',
+    '0.0.0.0 ereg.adobe.com',
+    '0.0.0.0 activate.adobe.com',
+    '0.0.0.0 practivate.adobe.com',
+    '0.0.0.0 entitlement.adobe.com',
+    '0.0.0.0 wip.adobe.com'
+)
+try {
+    $hostsContent = @(Get-Content -LiteralPath $hostsFile -ErrorAction SilentlyContinue)
+    $hostAdded = 0
+    foreach ($he in $hostEntries) {
+        $hostname = ($he -split '\s+')[1]
+        $already = $hostsContent | Where-Object { $_ -match ("^\s*(0\.0\.0\.0|127\.0\.0\.1)\s+" + [regex]::Escape($hostname) + "\s*$") }
+        if (-not $already) {
+            Add-Content -LiteralPath $hostsFile -Value $he -Encoding ASCII
+            $hostAdded++
+        }
+    }
+    if ($hostAdded -gt 0) { Write-Log "Hosts file: added $hostAdded Adobe domain block entries." }
+    else { Write-Log 'Hosts file: all Adobe block entries already present.' }
+} catch {
+    Write-Log "  WARN could not update hosts file :: $($_.Exception.Message)"
+}
+
 # ---- 6. Stop background helper processes (never main apps) ----
 if (-not $SkipKillHelpers) {
     $helperNames = @('CCXProcess', 'CCLibrary', 'AdobeIPCBroker', 'CoreSync', 'LogCollectorTool')

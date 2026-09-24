@@ -31,7 +31,9 @@ Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolic
 3. 若防火墙配置文件被关闭则自动启用（`Set-NetFirewallProfile -Enabled $true`）；
 4. 备份授权判定缓存（`Adobe PCD\cache\cache.db`、`pcd.db`、`SLStore\*` 重命名为 `.bak`）——清除本地缓存的"非正版"判定；
 5. 把 Adobe 域名（`adobe.com`、`adobe.io`、`adobe.net`、`adobecreativecloud.com`、`adobessm.com` 等及子域）加入系统代理绕过列表——防止应用走代理绕过防火墙；
-6. 停止 Adobe 后台辅助进程（CCXProcess/CCLibrary/AdobeIPCBroker/CoreSync 等；**绝不杀** Photoshop.exe / Illustrator.exe / Lightroom.exe 等主程序）。
+6. 若检测到 Clash Verge（`verge.yaml`），把 Adobe 域名写入它**自己的**代理绕过配置（`use_default_bypass: false` + `system_proxy_bypass`），防止代理软件重启时冲掉手动添加的绕过项；
+7. 在 hosts 文件中把 Adobe 授权/正版校验域名（`lmlicenses.wip4.adobe.com`、`prod.adobegenuine.com`、`cc-api.adobe.io` 等 23 个）解析到 `0.0.0.0`——即使应用不走系统代理，DNS 解析也直接失败；
+8. 停止 Adobe 后台辅助进程（CCXProcess/CCLibrary/AdobeIPCBroker/CoreSync 等；**绝不杀** Photoshop.exe / Illustrator.exe / Lightroom.exe 等主程序）。
 
 幂等设计：已存在的规则会自动跳过，重复运行安全。日志写入 `$env:TEMP\block-adobe-network-<时间戳>.log`。
 
@@ -46,6 +48,7 @@ Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolic
 若用户重开 Photoshop 后仍弹"失去访问权限"：
 1. 先确认防火墙没有被第三方软件再次关闭（重跑 verify 脚本看 Enabled）；
 2. **检查是否走了系统代理**：若用户装了 Clash/mihomo 等代理且系统代理开启，Adobe 应用会通过代理联网，绕过按程序路径的防火墙规则（真正的出站连接由代理进程发出）。此时查看 Windows 防火墙连接日志（`C:\Windows\System32\LogFiles\Firewall\pfirewall.log`，需管理员读取）确认 Adobe PID 是否在连 `127.0.0.1:<代理端口>`；修复方式就是重跑主脚本（会自动把 Adobe 域名加入代理绕过列表，逼应用直连后由防火墙拦截）；
+   - **特别注意：Clash Verge 会在启动/重配时重写系统代理并冲掉手动加入的绕过项**。若绕过列表又变回默认（只剩 `localhost;127.*;<local>` 等），说明被重置了——重跑主脚本即可（它会同时写 Clash 自己的 `verge.yaml`，之后重启 Clash 也不再丢）；
 3. 确认所有 Adobe 进程已退出后完全重启应用（后台进程被杀后会自动重启，不影响）；
 4. 确认脚本日志里授权缓存已成功备份（`.bak` 存在）；
 5. 若仍无效，检查是否有 Adobe 程序安装在其他未发现的位置（如 D:\AI 等安装包目录），补建规则后重跑主脚本。
@@ -64,8 +67,10 @@ Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolic
 - **规则按程序路径生效**：Adobe 程序换了安装位置或装了新版本后，需要重跑主脚本补规则。
 - **本地授权缓存会断网也弹窗**：Adobe 服务器曾返回的"非正版"结论被缓存在 `Adobe PCD\cache.db / pcd.db / SLStore`，断网后应用读缓存照样弹窗；备份（重命名）这些缓存数据库后应用会重新校验，连不上服务器即进入离线可用。
 - **系统代理会绕过按程序路径的规则**：装了 Clash/mihomo 等代理并开启系统代理时，Adobe 应用经 `127.0.0.1:<端口>` 出网，真实连接由代理进程发起，防火墙按程序拦截失效。必须把 Adobe 域名加入代理绕过列表（主脚本自动处理），让应用直连后被规则拦截。
+- **Clash Verge 会重置系统代理绕过列表**：代理软件启动/重配时会把 ProxyOverride 写回默认值，手动加的 Adobe 域名会被冲掉。主脚本同时修改 Clash 自己的 `verge.yaml`（`system_proxy_bypass`），从源头持久化，代理重启也不丢。
+- **hosts 兜底**：主脚本还把 23 个 Adobe 授权/正版校验域名写进 hosts（`0.0.0.0`），即使应用绕过系统代理，DNS 解析也直接失败。hosts 改动会全局生效（浏览器访问这些域名同样被拦），恢复联网时 unblock 脚本会一并清理。
 - **Block 规则优先于 Allow 规则**：即使存在放行规则，Block 也生效，无需清理放行规则。
-- **只拦 Adobe 程序本身**：浏览器等非 Adobe 进程访问 adobe.com 不受影响；如用户要求连域名一起拦，可额外改 hosts（本技能默认不做）。
+- **只拦 Adobe 程序本身**：浏览器等非 Adobe 进程访问 adobe.com 不受影响；hosts 兜底仅拦授权相关域名（不影响 adobe.com 主页）。
 - **UAC 提权**：所有写防火墙/改 Program Files 的操作都必须在提权进程中执行；用 `Start-Process -Verb RunAs` 触发，并提醒用户点击 UAC 确认框。
 - 主程序（Photoshop.exe 等）进程**绝不自动结束**，避免用户未保存的工作丢失。
 
